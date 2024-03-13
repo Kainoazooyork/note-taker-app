@@ -1,18 +1,86 @@
-const express = require('express');
+const express = require("express");
+const fs = require("fs");
+const path = require("path");
+//const uniqid = require("uniqid");
 
 const PORT = process.env.PORT || 3001;
 const app = express();
-const apiRoutes = require('./routes/apiRoutes');
-const htmlRoutes = require('./routes/htmlRoutes');
 
-app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-app.use(express.static('public'));
+app.use(express.static("Develop/public"));
 
-app.use('/api', apiRoutes);
-app.use('/', htmlRoutes);
+app.get("/", (req, res) =>
+  res.sendFile(path.join(__dirname, "Develop/public/index.html"))
+);
 
-app.listen(PORT, () => {
-  console.log(`API server now on port ${PORT}!`);
+app.get("/notes", (req, res) =>
+  res.sendFile(path.join(__dirname, "Develop/public/notes.html"))
+);
+
+app.get("/api/notes", function (req, res) {
+  fs.readFile("Develop/db/db.json", "utf8", (err, data) => {
+    var jsonData = JSON.parse(data);
+    console.log(jsonData);
+    res.json(jsonData);
+  });
 });
+
+const readThenAppendToJson = (content, file) => {
+  fs.readFile(file, "utf8", (err, data) => {
+    if (err) {
+      console.error(err);
+    } else {
+      const parsedData = JSON.parse(data);
+      parsedData.push(content);
+      writeNewNoteToJson(file, parsedData);
+    }
+  });
+};
+
+const writeNewNoteToJson = (destination, content) =>
+  fs.writeFile(destination, JSON.stringify(content, null, 4), (err) =>
+    err ? console.error(err) : console.info(`\nData written to ${destination}`)
+  );
+
+app.post("/api/notes", (req, res) => {
+  const { title, text } = req.body;
+  if (title && text) {
+    const newNote = {
+      title: title,
+      text: text,
+      id: uniqid(),
+    };
+
+    readThenAppendToJson(newNote, "Develop/db/db.json");
+
+    const response = {
+      status: "success",
+      body: newNote,
+    };
+
+    res.json(response);
+  } else {
+    res.json("Error in posting new note");
+  }
+});
+
+app.delete("/api/notes/:id", (req, res) => {
+  let id = req.params.id;
+  let parsedData;
+  fs.readFile("Develop/db/db.json", "utf8", (err, data) => {
+    if (err) {
+      console.error(err);
+    } else {
+      parsedData = JSON.parse(data);
+      const filterData = parsedData.filter((note) => note.id !== id);
+      writeNewNoteToJson("Develop/db/db.json", filterData);
+    }
+  });
+  res.send(`Deleted note with ${req.params.id}`);
+});
+
+app.listen(PORT, () =>
+  console.log(`App listening at http://localhost:${PORT}`)
+);
